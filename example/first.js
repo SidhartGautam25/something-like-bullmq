@@ -1,13 +1,10 @@
-// Subscribe to dead jobs
-await queue.subscribeToEvents((event) => {
-  if (event.event === "dead") {
-    console.error("Dead job detected:", event.jobId);
-  }
+// Create queue with custom TTL
+const queue = new TinyQueue("email", {
+  jobTTL: 2 * 60 * 60 * 1000, // 2 hours
+  cleanupInterval: 5 * 60 * 1000, // 5 minutes
 });
 
-// Later you can fetch dead jobs manually
-const deadJobs = await redis.zrange(`queue:email:dead`, 0, -1);
-deadJobs.forEach((jobStr) => {
-  const job = JSON.parse(jobStr);
-  console.log("Dead job:", job);
-});
+// Cleanup happens automatically!
+
+// To manually stop cleanup loop (if app shutting down)
+queue.stopCleanupLoop();

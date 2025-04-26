@@ -4,11 +4,13 @@ import Redis from "ioredis";
 const redis = new Redis();
 
 export class TinyQueue {
-  constructor(name) {
+  constructor(name, options = {}) {
     this.name = name;
+    this.cleanupInterval = options.cleanupInterval || 60000; // default 1 min
+    this.jobTTL = options.jobTTL || 3600000; // default 1 hour
+    this.startCleanupLoop();
   }
 
-  // Internal keys
   get waitingKey() {
     return `queue:${this.name}:waiting`;
   }
@@ -56,9 +58,7 @@ export class TinyQueue {
 
   async get() {
     const isPaused = await redis.get(this.pauseKey);
-    if (isPaused) {
-      return null;
-    }
+    if (isPaused) return null;
 
     const now = Date.now();
     const dueJobs = await redis.zrangebyscore(this.delayedKey, 0, now);
@@ -70,9 +70,7 @@ export class TinyQueue {
     }
 
     const jobs = await redis.zrange(this.waitingKey, 0, 0);
-    if (jobs.length === 0) {
-      return null;
-    }
+    if (jobs.length === 0) return null;
 
     const jobStr = jobs[0];
     const job = JSON.parse(jobStr);
@@ -115,10 +113,7 @@ export class TinyQueue {
       };
       const deadJobStr = JSON.stringify(deadJob);
 
-      // Move to dead letter queue
       await redis.zadd(this.deadLetterKey, Date.now(), deadJobStr);
-
-      // Also add a copy in failed queue
       await redis.zadd(this.failedKey, Date.now(), deadJobStr);
 
       await redis.publish(
@@ -151,16 +146,27 @@ export class TinyQueue {
 
     return sub;
   }
+
+  startCleanupLoop() {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupOldJobs();
+    }, this.cleanupInterval);
+  }
+
+  async cleanupOldJobs() {
+    const now = Date.now();
+    const expireBefore = now - this.jobTTL;
+
+    await Promise.all([
+      redis.zremrangebyscore(this.completedKey, 0, expireBefore),
+      redis.zremrangebyscore(this.failedKey, 0, expireBefore),
+      redis.zremrangebyscore(this.deadLetterKey, 0, expireBefore),
+    ]);
+
+    console.log(`[TinyQueue] Cleanup done for queue "${this.name}"`);
+  }
+
+  stopCleanupLoop() {
+    clearInterval(this.cleanupTimer);
+  }
 }
-
-/*
-
-Now when a job fails after all retries,it's moved to queue:name:dead
-
-new event type:"dead" when moved to dead letter queue
-
-we all record it in the faild queue for easier tracking
-
-Now your system can safely track jobs that fully fail without losing them.
-
-*/
