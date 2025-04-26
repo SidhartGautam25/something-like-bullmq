@@ -178,4 +178,33 @@ export class TinyQueue {
   stopCleanupLoop() {
     clearInterval(this.cleanupTimer);
   }
+
+  // (Assuming everything else from previous steps already exists!)
+
+  async metrics() {
+    const [
+      waitingCount,
+      activeCount,
+      delayedCount,
+      completedCount,
+      failedCount,
+      deadCount,
+    ] = await Promise.all([
+      redis.zcard(this.waitingKey),
+      redis.zcard(this.activeKey),
+      redis.zcard(this.delayedKey),
+      redis.zcard(this.completedKey),
+      redis.zcard(this.failedKey),
+      redis.zcard(this.deadLetterKey),
+    ]);
+
+    return {
+      waiting: waitingCount,
+      active: activeCount,
+      delayed: delayedCount,
+      completed: completedCount,
+      failed: failedCount,
+      dead: deadCount,
+    };
+  }
 }
