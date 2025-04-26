@@ -1,26 +1,13 @@
-const queue = new TinyQueue("email");
-
-// Pause the queue
-await queue.pause();
-
-// Resume it
-await queue.resume();
-
-// Subscribe to events
+// Subscribe to dead jobs
 await queue.subscribeToEvents((event) => {
-  console.log("Queue Event:", event);
+  if (event.event === "dead") {
+    console.error("Dead job detected:", event.jobId);
+  }
 });
 
-// Add job
-await queue.add({ email: "hello@example.com" });
-
-// Worker loop
-const job = await queue.get();
-if (job) {
-  try {
-    console.log("Processing", job.data);
-    await queue.complete(job);
-  } catch (err) {
-    await queue.fail(job);
-  }
-}
+// Later you can fetch dead jobs manually
+const deadJobs = await redis.zrange(`queue:email:dead`, 0, -1);
+deadJobs.forEach((jobStr) => {
+  const job = JSON.parse(jobStr);
+  console.log("Dead job:", job);
+});
