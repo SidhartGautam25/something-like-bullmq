@@ -1,10 +1,10 @@
-// Create queue with custom TTL
-const queue = new TinyQueue("email", {
-  jobTTL: 2 * 60 * 60 * 1000, // 2 hours
-  cleanupInterval: 5 * 60 * 1000, // 5 minutes
+// Create queue
+const queue = new TinyQueue("reports", {
+  jobTTL: 6 * 60 * 60 * 1000, // 6 hours default
 });
 
-// Cleanup happens automatically!
+// Add normal job (default TTL applies)
+await queue.add({ reportId: 123 });
 
-// To manually stop cleanup loop (if app shutting down)
-queue.stopCleanupLoop();
+// Add important job (custom TTL: 1 day)
+await queue.add({ reportId: 456 }, { ttl: 24 * 60 * 60 * 1000 });

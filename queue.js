@@ -6,8 +6,8 @@ const redis = new Redis();
 export class TinyQueue {
   constructor(name, options = {}) {
     this.name = name;
-    this.cleanupInterval = options.cleanupInterval || 60000; // default 1 min
-    this.jobTTL = options.jobTTL || 3600000; // default 1 hour
+    this.cleanupInterval = options.cleanupInterval || 60000; // 1 min default
+    this.defaultJobTTL = options.jobTTL || 3600000; // 1 hour default
     this.startCleanupLoop();
   }
 
@@ -37,19 +37,21 @@ export class TinyQueue {
   }
 
   async add(data, options = {}) {
+    const now = Date.now();
     const job = {
-      id: Date.now() + Math.random(),
+      id: now + Math.random(),
       data,
       attempts: options.attempts || 3,
       delayUntil: options.delayUntil || 0,
       priority: options.priority || 0,
-      createdAt: Date.now(),
+      createdAt: now,
+      ttl: options.ttl || this.defaultJobTTL, // 🌟 New: job-level TTL
       state: "waiting",
     };
 
     const jobStr = JSON.stringify(job);
 
-    if (job.delayUntil > Date.now()) {
+    if (job.delayUntil > now) {
       await redis.zadd(this.delayedKey, job.delayUntil, jobStr);
     } else {
       await redis.zadd(this.waitingKey, job.priority, jobStr);
@@ -155,15 +157,22 @@ export class TinyQueue {
 
   async cleanupOldJobs() {
     const now = Date.now();
-    const expireBefore = now - this.jobTTL;
 
-    await Promise.all([
-      redis.zremrangebyscore(this.completedKey, 0, expireBefore),
-      redis.zremrangebyscore(this.failedKey, 0, expireBefore),
-      redis.zremrangebyscore(this.deadLetterKey, 0, expireBefore),
-    ]);
+    for (const key of [this.completedKey, this.failedKey, this.deadLetterKey]) {
+      const jobs = await redis.zrange(key, 0, -1);
 
-    console.log(`[TinyQueue] Cleanup done for queue "${this.name}"`);
+      for (const jobStr of jobs) {
+        const job = JSON.parse(jobStr);
+        const jobCreatedAt = job.createdAt || 0;
+        const ttl = job.ttl || this.defaultJobTTL;
+        const expireAt = jobCreatedAt + ttl;
+
+        if (now >= expireAt) {
+          await redis.zrem(key, jobStr);
+          console.log(`[TinyQueue] Cleaned up job ${job.id} from ${key}`);
+        }
+      }
+    }
   }
 
   stopCleanupLoop() {
