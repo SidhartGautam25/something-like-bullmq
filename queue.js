@@ -45,7 +45,7 @@ export class TinyQueue {
       delayUntil: options.delayUntil || 0,
       priority: options.priority || 0,
       createdAt: now,
-      ttl: options.ttl || this.defaultJobTTL, // 🌟 New: job-level TTL
+      ttl: options.ttl || this.defaultJobTTL, // New: job-level TTL
       state: "waiting",
     };
 
