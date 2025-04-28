@@ -137,6 +137,18 @@ export class TinyQueue {
     await redis.del(this.pauseKey);
   }
 
+  async storeResult(jobId, result) {
+    const key = `queue:${this.name}:result:${jobId}`;
+    await redis.set(key, JSON.stringify(result));
+  }
+
+  async getResult(jobId) {
+    const key = `queue:${this.name}:result:${jobId}`;
+    const resultStr = await redis.get(key);
+    if (!resultStr) return null;
+    return JSON.parse(resultStr);
+  }
+
   async subscribeToEvents(handler) {
     const sub = new Redis();
     await sub.subscribe(this.eventChannel);

@@ -11,3 +11,11 @@ In version 3,we will add
 
 
 */
+
+/*
+
+we implemented two method in v3 for now and that are storeResult and
+getResult
+
+
+*/
